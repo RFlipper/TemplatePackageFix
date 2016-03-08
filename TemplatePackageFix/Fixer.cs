@@ -1,23 +1,21 @@
-﻿using System;
+﻿using Plumsail.TemplatePackageFix.Helpers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
 using System.Xml.Linq;
-using Plumsail.TemplatePackageFix.Helpers;
 
 namespace Plumsail.TemplatePackageFix
 {
     public sealed class Fixer
     {
         #region Declarations 
-        readonly XNamespace ns           = "http://schemas.microsoft.com/sharepoint/";
+        readonly string BasePath;
+        readonly XNamespace ns = "http://schemas.microsoft.com/sharepoint/";
         readonly string WFPackSolutionID = "64283c6e-6aea-4a86-a881-042359b3521a";
         readonly string WFFeaturePath    = "SP2013Workflows";
-        readonly string BasePath;
+        readonly List<string> WFPackFeatures = new List<string> { "{9a5d1295-65c0-4c8e-a926-968da90d2ef9}", "{d7891031-e7f5-4734-8077-9189dd35551c}" }; 
 
         private XDocument wfFeature;
         private XDocument wfElements;
@@ -86,7 +84,7 @@ namespace Plumsail.TemplatePackageFix
         internal void CreateWorkflowFeature()
         {
             wfFeatureDir = Path.Combine(BasePath, WFFeaturePath);
-            System.IO.Directory.CreateDirectory(wfFeatureDir);
+            Directory.CreateDirectory(wfFeatureDir);
             wfFeature = new XDocument(
                 new XElement(ns + "Feature",
                     new XAttribute("Id", Guid.NewGuid().ToString()),
@@ -141,8 +139,7 @@ namespace Plumsail.TemplatePackageFix
             var onetFilePath = Path.Combine(featureDir, onet.Attribute("Location").Value);
             var onetDocument = XDocument.Load(onetFilePath);
             var features = onetDocument.Descendants(ns + "Feature")
-                .Where(el => el.Attribute("ID").Value == "{9a5d1295-65c0-4c8e-a926-968da90d2ef9}"
-                          || el.Attribute("ID").Value == "{d7891031-e7f5-4734-8077-9189dd35551c}");
+                .Where(el => WFPackFeatures.Contains(el.Attribute("ID").Value));
 
             if (features.Count() < 1)
                 return;
@@ -166,8 +163,8 @@ namespace Plumsail.TemplatePackageFix
         private void RemoveModules(XDocument feature, XDocument elements, string featureDir)
         {
             var workflowFiles =
-                feature.Descendants(ns + "ElementFile")
-                    .Where(el => el.Attribute("Location").Value.Contains("\\Workflows\\"));
+                feature.Descendants(ns + "ElementFile").Where(ActionsFilter);
+
 
             if (workflowFiles.Count() < 1)
                 return;
@@ -198,6 +195,14 @@ namespace Plumsail.TemplatePackageFix
 
             //Remove nodes from Feature.xml
             workflowFiles.Remove();
+        }
+
+        private bool ActionsFilter(XElement el)
+        {
+            var location = el.Attribute("Location").Value;
+            var ext = Path.GetExtension(location);
+
+            return location.Contains("\\Workflows\\") && (ext == ".xaml" || ext == ".actions4");
         }
 
         private void RemovePackageDependency(XDocument manifest)
